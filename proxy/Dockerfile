@@ -5,4 +5,4 @@ COPY requeriments.txt .
 RUN pip install --no-cache-dir -r requeriments.txt
 COPY . .
 
-CMD ["python", "client.py"]
+CMD ["python", "app.py"]
