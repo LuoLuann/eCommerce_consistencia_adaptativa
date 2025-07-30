@@ -12,7 +12,7 @@ redis_client = redis.Redis(host=os.getenv('REDIS_HOST', 'redis-master'), port=63
 NUM_REPLICAS_FOR_STRONG = 1 
 WAIT_TIMEOUT_MS = 1000
 
-@app('/write', method=['POST'])
+@app.route('/write', methods=['POST'])
 def write_data():
     try:
         data = request.get_json()
@@ -31,10 +31,10 @@ def write_data():
 
             if replicas_acked >= NUM_REPLICAS_FOR_STRONG:
                 return jsonify({"status": "success", "consistency": "strong", "replicas_acked": replicas_acked}), 200
-            else 
+            else:
                 # Se o timeout for atingido, retorna erro.
                 return jsonify({"status": "error", "message": "Write timeout: strong consistency guarantes failed"}), 503
-        else
+        else:
             # --- FLUXO DE CONSISTÊNCIA EVENTUAL ---
             # Apenas escreve no primário e retorna sucesso imediatamente.
             redis_client.set(key, value)

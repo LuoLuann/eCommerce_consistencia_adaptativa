@@ -1,6 +1,6 @@
 import requests
-import timeout
 import random
+import time
 
 PROXY_URL = "http://proxy:5000/write"
 
@@ -11,11 +11,14 @@ while True:
 
         print(f"Serviço de Catálogo: Enviando requisição EVENTUAL para a chave {key}")
 
-        requests.post(PROXY_URL, json={
+        response = requests.post(PROXY_URL, json={
             "key": key,
             "value": str(value),
             "consistency": "eventual"
-        })
+        }, timeout=5)
+
+        response.raise_for_status()
+        
     except requests.exceptions.RequestException as e:
         print(f"Erro no serviço de cataloogo: {e}")
 
