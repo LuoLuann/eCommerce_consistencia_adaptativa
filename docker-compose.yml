@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  proxy:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - REDIS_HOST=redis-master
+    networks:
+      - rede_consistencia
+
+  redis-master:
+    image: redis:7-alpine
+    networks:
+      - rede_consistencia
+
+  redis-replica:
+    image: redis:7-alpine
+    command: redis-server --slaveof redis-master 6379
+    depends_on:
+      - redis-master
+    networks:
+      - rede_consistencia
+
+  servico-pedidos:
+    build: ./servico-pedidos
+    depends_on:
+      - proxy
+    networks:
+      - rede_consistencia
+
+  servico-pagamentos:
+    build: ./servico-pagamentos
+    depends_on:
+      - proxy
+    networks:
+      - rede_consistencia
+  
+  servico-catalogo:
+    build: ./servico-catalogo
+    depends_on:
+      - proxy
+    networks:
+      - rede_consistencia
+
+  servico-avaliacoes:
+    build: ./servico-avaliacoes
+    depends_on:
+      - proxy
+    networks:
+      - rede_consistencia
+
+networks:
+  rede_consistencia:
