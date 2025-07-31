@@ -34,7 +34,7 @@ services:
     networks:
       - rede_consistencia
     volumes:
-      - ./servico-pedidos:/app # Mapeia o código para o contêiner
+      - ./logs:/app/logs
 
   servico-pagamentos:
     build: ./servico-pagamentos
@@ -43,8 +43,8 @@ services:
     networks:
       - rede_consistencia
     volumes:
-      - ./servico-pagamentos:/app # Mapeia o código para o contêiner
-  
+      - ./logs:/app/logs
+
   servico-catalogo:
     build: ./servico-catalogo
     depends_on:
@@ -52,7 +52,7 @@ services:
     networks:
       - rede_consistencia
     volumes:
-      - ./servico-catalogo:/app # Mapeia o código para o contêiner
+      - ./logs:/app/logs
 
   servico-avaliacoes:
     build: ./servico-avaliacoes
@@ -61,7 +61,7 @@ services:
     networks:
       - rede_consistencia
     volumes:
-      - ./servico-avaliacoes:/app # Mapeia o código para o contêiner
+      - ./logs:/app/logs
 
 networks:
   rede_consistencia:

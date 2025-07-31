@@ -1,8 +1,16 @@
 from flask import Flask, request, jsonify
 import redis
 import os
+import logging
 
 app = Flask(__name__)
+
+# --- INÍCIO DA MODIFICAÇÃO ---
+# 2. Pega o logger padrão do Werkzeug (o servidor do Flask)
+log = logging.getLogger('werkzeug')
+# 3. Define o nível de log para mostrar apenas ERROS, escondendo os logs de acesso
+log.setLevel(logging.ERROR)
+# --- FIM DA MODIFICAÇÃO --
 
 # Conecta ao Redis. O nome 'redis-master' é resolvido pelo Docker Compose.
 redis_client = redis.Redis(host=os.getenv('REDIS_HOST', 'redis-master'), port=6379, db=0, decode_responses=True)

@@ -1,5 +1,5 @@
 # Ignorar todos os diretórios de logs e seu conteúdo
-**/logs/
+# **/logs/
 
 # Ignorar arquivos de cache do Python
 __pycache__/
