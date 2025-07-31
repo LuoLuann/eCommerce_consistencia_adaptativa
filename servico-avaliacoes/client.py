@@ -1,66 +1,83 @@
 import requests
-import time
 import random
+import time
 import csv
 from datetime import datetime
 
 PROXY_URL = "http://proxy:5000/write"
 
-# --- Configuração do CSV ---
+# --- Configuração dos arquivos CSV ---
 now = datetime.now()
-file_name = f"avaliacoes_{now.strftime('%Y-%m-%d_%H-%M')}.csv"
-csv_file = open(file_name, 'w', newline='')
-csv_writer = csv.writer(csv_file)
-csv_writer.writerow(['timestamp', 'latency_seconds', 'consistency_type', 'success'])
+date_str = now.strftime('%Y-%m-%d_%H-%M')
+service_name = "catalogo"
+
+# Arquivo para latência
+latency_file = open(f"latencias_{service_name}_{date_str}.csv", 'w', newline='')
+latency_writer = csv.writer(latency_file)
+latency_writer.writerow(['timestamp', 'latency_seconds', 'consistency_type', 'success'])
+
+# Arquivo para throughput
+throughput_file = open(f"throughput_{service_name}_{date_str}.csv", 'w', newline='')
+throughput_writer = csv.writer(throughput_file)
+throughput_writer.writerow(['timestamp', 'requests_per_second'])
+
+# Arquivo para conflitos/erros
+conflicts_file = open(f"conflitos_{service_name}_{date_str}.csv", 'w', newline='')
+conflicts_writer = csv.writer(conflicts_file)
+conflicts_writer.writerow(['timestamp', 'error_message'])
 
 # --- Configuração do Throughput ---
 request_count = 0
 start_time_throughput = time.time()
 
-print(f"Iniciando serviço de Avaliações. Métricas serão salvas em {file_name}")
+print(f"Iniciando serviço de Catálogo. Métricas serão salvas em 3 arquivos CSV.")
 
 while True:
-    review_id = f"review_{random.randint(10000, 99999)}"
-    review_data = {
-        "product_id": f"item{random.randint(1, 10)}",
-        "user_id": f"user{random.randint(1, 100)}",
-        "rating": random.randint(1, 5)
-    }
+    key = f"product_view:item{random.randint(1, 10)}"
+    value = random.randint(1, 1000)
     success = False
 
     start_time_latency = time.time()
-    
+
     try:
         response = requests.post(PROXY_URL, json={
-            "key": review_id,
-            "value": str(review_data),
+            "key": key,
+            "value": str(value),
             "consistency": "eventual"
-        }, timeout=2)
+        }, timeout=5)
 
         response.raise_for_status()
         success = True
-        print(f"Serviço de Avaliações: Requisição EVENTUAL para a chave {review_id} bem-sucedida.")
-
+        print(f"Serviço de Catálogo: Requisição EVENTUAL para a chave {key} bem-sucedida.")
+        
     except requests.exceptions.RequestException as e:
-        print(f"!!! Erro no Serviço de Avaliações: {e}")
+        error_msg = str(e)
+        print(f"!!! Erro no serviço de catalogo: {error_msg}")
+        conflicts_writer.writerow([datetime.now().isoformat(), error_msg])
+        conflicts_file.flush()
 
     finally:
         end_time_latency = time.time()
         latency = end_time_latency - start_time_latency
         timestamp = datetime.now().isoformat()
         
-        csv_writer.writerow([timestamp, f"{latency:.4f}", "eventual", success])
-        csv_file.flush()
-        
+        # Salva a latência no CSV
+        latency_writer.writerow([timestamp, f"{latency:.4f}", "eventual", success])
+        latency_file.flush()
+
         request_count += 1
-    
-    # Calcula e exibe o throughput a cada 10 segundos
+
+    # Calcula e salva o throughput a cada 10 segundos
     current_time = time.time()
     elapsed_time = current_time - start_time_throughput
     if elapsed_time >= 10:
         throughput = request_count / elapsed_time
-        print(f"--- Throughput de Avaliações: {throughput:.2f} reqs/segundo ---")
+        print(f"--- Throughput de Catálogo: {throughput:.2f} reqs/segundo ---")
+        # Salva o throughput no CSV
+        throughput_writer.writerow([datetime.now().isoformat(), f"{throughput:.2f}"])
+        throughput_file.flush()
+        
         request_count = 0
         start_time_throughput = current_time
 
-    time.sleep(1.5)
+    time.sleep(0.5)
