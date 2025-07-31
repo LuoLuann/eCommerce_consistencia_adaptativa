@@ -2,6 +2,7 @@ import requests
 import random
 import time
 import csv
+import os
 from datetime import datetime
 
 PROXY_URL = "http://proxy:5000/write"
@@ -9,19 +10,23 @@ PROXY_URL = "http://proxy:5000/write"
 now = datetime.now()
 date_str = now.strftime('%Y-%m-%d_%H-%M')
 service_name = "pedidos"
+log_dir = "logs"
+
+# Cria a pasta de logs se ela não existir
+os.makedirs(log_dir, exist_ok=True)
 
 # Arquivo para latência
-latency_file = open(f"latencias_{service_name}_{date_str}.csv", 'w', newline='')
+latency_file = open(os.path.join(log_dir, f"latencias_{service_name}_{date_str}.csv"), 'w', newline='')
 latency_writer = csv.writer(latency_file)
 latency_writer.writerow(['timestamp', 'latency_seconds', 'consistency_type', 'success'])
 
 # Arquivo para throughput
-throughput_file = open(f"throughput_{service_name}_{date_str}.csv", 'w', newline='')
+throughput_file = open(os.path.join(log_dir, f"throughput_{service_name}_{date_str}.csv"), 'w', newline='')
 throughput_writer = csv.writer(throughput_file)
 throughput_writer.writerow(['timestamp', 'requests_per_second'])
 
 # Arquivo para conflitos/erros
-conflicts_file = open(f"conflitos_{service_name}_{date_str}.csv", 'w', newline='')
+conflicts_file = open(os.path.join(log_dir, f"conflitos_{service_name}_{date_str}.csv"), 'w', newline='')
 conflicts_writer = csv.writer(conflicts_file)
 conflicts_writer.writerow(['timestamp', 'error_message'])
 
