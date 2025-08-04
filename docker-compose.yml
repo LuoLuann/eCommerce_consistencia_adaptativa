@@ -11,6 +11,8 @@ services:
       - REDIS_HOST=redis-master
     networks:
       - rede_consistencia
+    volumes:
+      - ./proxy:/app # Mapeia o código do proxy
 
   redis-master:
     image: redis:7-alpine
@@ -31,6 +33,8 @@ services:
       - proxy
     networks:
       - rede_consistencia
+    volumes:
+      - ./logs:/app/logs
 
   servico-pagamentos:
     build: ./servico-pagamentos
@@ -38,13 +42,17 @@ services:
       - proxy
     networks:
       - rede_consistencia
-  
+    volumes:
+      - ./logs:/app/logs
+
   servico-catalogo:
     build: ./servico-catalogo
     depends_on:
       - proxy
     networks:
       - rede_consistencia
+    volumes:
+      - ./logs:/app/logs
 
   servico-avaliacoes:
     build: ./servico-avaliacoes
@@ -52,6 +60,8 @@ services:
       - proxy
     networks:
       - rede_consistencia
+    volumes:
+      - ./logs:/app/logs
 
 networks:
   rede_consistencia:
