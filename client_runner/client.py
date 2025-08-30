@@ -13,7 +13,6 @@ time.sleep(5)
 
 # --- CONFIGURAÇÕES VINDAS DE VARIÁVEIS DE AMBIENTE ---
 SERVICE_NAME = os.getenv("SERVICE_NAME", "default-service")
-CONSISTENCY_TYPE = os.getenv("CONSISTENCY_TYPE", "eventual")
 NUM_REQUESTS = int(os.getenv("NUM_REQUESTS", 1000))
 SLEEP_INTERVAL = float(os.getenv("SLEEP_INTERVAL", 0.1))
 NODE_ID = os.getenv("NODE_ID", "node-unknown")
@@ -55,6 +54,7 @@ try:
         success = False
         error_msg = ""
         conflict_detected = False
+        consistency_used = "N/A" # O cliente não sabe mais a consistência
         
         old_value = None
         try:
@@ -67,13 +67,19 @@ try:
         start_time_latency = time.time()
         
         try:
+            # O cliente não envia mais o campo 'consistency'
             write_response = requests.post(PROXY_WRITE_URL, json={
                 "key": key,
-                "value": json.dumps(value),
-                "consistency": CONSISTENCY_TYPE
+                "value": json.dumps(value)
             }, timeout=10)
+            
             write_response.raise_for_status()
+            
+            # Pega a consistência que o proxy usou a partir da resposta
+            response_data = write_response.json()
+            consistency_used = response_data.get("consistency", "unknown")
             success = True
+            
         except requests.exceptions.RequestException as e:
             error_msg = str(e)
             print(f"!!! ERRO NA REQUISIÇÃO para {SERVICE_NAME}: {error_msg}")
@@ -87,7 +93,7 @@ try:
         results.append({
             "timestamp": datetime.now().isoformat(),
             "service": SERVICE_NAME,
-            "consistency": CONSISTENCY_TYPE,
+            "consistency_used": consistency_used, # Loga a consistência informada pelo proxy
             "latency_ms": latency_ms,
             "success": success,
             "error_message": error_msg,
@@ -106,8 +112,10 @@ finally:
     
     if results:
         print(f"Salvando {len(results)} resultados no arquivo CSV...")
+        # Adiciona 'consistency_used' aos cabeçalhos do CSV
+        fieldnames = ["timestamp", "service", "consistency_used", "latency_ms", "success", "error_message", "conflict_detected"]
         with open(output_file_path, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=results[0].keys())
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(results)
         print(f"Resultados de {SERVICE_NAME} ({NODE_ID}) salvos em {output_file_path}")
