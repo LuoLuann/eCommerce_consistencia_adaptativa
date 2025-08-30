@@ -11,7 +11,7 @@ def analyze_and_plot(scenario_folder):
     """Lê todos os CSVs de uma pasta de cenário e gera análises e gráficos detalhados."""
     
     scenario_path = os.path.join(LOGS_DIR, scenario_folder)
-    os.makedirs(GRAFICOS_DIR, exist_ok=True) # Cria a pasta de gráficos se não existir
+    os.makedirs(GRAFICOS_DIR, exist_ok=True)
 
     all_files = [os.path.join(scenario_path, f) for f in os.listdir(scenario_path) if f.endswith('.csv')]
     if not all_files:
@@ -28,22 +28,23 @@ def analyze_and_plot(scenario_folder):
         print("Nenhuma requisição bem-sucedida encontrada para análise.")
         return
         
-    # --- 1. Análise de Latência (com mais detalhes) ---
+    # --- 1. Análise de Latência ---
     plt.figure(figsize=(12, 8))
     ax = sns.boxplot(x='service', y='latency_ms', hue='consistency', data=success_df, palette={"strong": "salmon", "eventual": "skyblue"})
     plt.title(f'Distribuição de Latência por Serviço ({scenario_folder})', fontsize=16)
     plt.ylabel('Latência (ms)', fontsize=12)
     plt.xlabel('Serviço', fontsize=12)
     plt.yscale('log')
-    plt.grid(True, which="both", ls="--", linewidth=0.5) # Adiciona grade para facilitar a leitura
+    plt.grid(True, which="both", ls="--", linewidth=0.5)
     plt.tight_layout()
     
     # Adiciona anotações de mediana no gráfico
     medians = success_df.groupby(['service'])['latency_ms'].median().round(2)
     for i, service in enumerate(ax.get_xticklabels()):
         service_name = service.get_text()
-        ax.text(i, medians[service_name], f' {medians[service_name]} ms', 
-                horizontalalignment='left', size='small', color='black', weight='semibold')
+        if service_name in medians:
+            ax.text(i, medians[service_name], f' {medians[service_name]} ms', 
+                    horizontalalignment='center', size='small', color='black', weight='semibold')
 
     grafico_latencia_path = os.path.join(GRAFICOS_DIR, f"{scenario_folder}_latencia.png")
     plt.savefig(grafico_latencia_path)
@@ -55,7 +56,7 @@ def analyze_and_plot(scenario_folder):
     print("\n--- Estatísticas Detalhadas de Latência (ms) ---")
     print(latency_stats)
     
-    # --- 2. Análise de Throughput (com valores nas barras) ---
+    # --- 2. Análise de Throughput ---
     success_df['timestamp'] = pd.to_datetime(success_df['timestamp'])
     
     def calculate_throughput(x):
@@ -67,30 +68,30 @@ def analyze_and_plot(scenario_folder):
     print("\n--- Throughput Médio (Requisições por Segundo) ---")
     print(throughput_stats.round(2))
     
-    service_consistency_map = success_df.drop_duplicates('service').set_index('service')['consistency']
-    color_map = {'strong': 'salmon', 'eventual': 'skyblue'}
-    bar_colors = throughput_stats.index.map(service_consistency_map).map(color_map)
+    if not success_df.empty:
+        service_consistency_map = success_df.drop_duplicates('service').set_index('service')['consistency']
+        color_map = {'strong': 'salmon', 'eventual': 'skyblue'}
+        bar_colors = throughput_stats.index.map(service_consistency_map).map(color_map)
 
-    plt.figure(figsize=(10, 6))
-    bars = throughput_stats.plot(kind='bar', color=bar_colors)
-    plt.title(f'Throughput Médio por Serviço ({scenario_folder})', fontsize=16)
-    plt.ylabel('Requisições por Segundo (RPS)', fontsize=12)
-    plt.xlabel('Serviço', fontsize=12)
-    plt.xticks(rotation=0)
-    plt.grid(axis='y', linestyle='--', linewidth=0.7)
-    
-    # Adiciona os valores no topo das barras
-    for bar in bars.patches:
-        bars.annotate(f'{bar.get_height():.2f}', 
-                      (bar.get_x() + bar.get_width() / 2, bar.get_height()),
-                      ha='center', va='center',
-                      size=10, xytext=(0, 8),
-                      textcoords='offset points')
+        plt.figure(figsize=(10, 6))
+        bars = throughput_stats.plot(kind='bar', color=bar_colors)
+        plt.title(f'Throughput Médio por Serviço ({scenario_folder})', fontsize=16)
+        plt.ylabel('Requisições por Segundo (RPS)', fontsize=12)
+        plt.xlabel('Serviço', fontsize=12)
+        plt.xticks(rotation=0)
+        plt.grid(axis='y', linestyle='--', linewidth=0.7)
+        
+        for bar in bars.patches:
+            bars.annotate(f'{bar.get_height():.2f}', 
+                          (bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                          ha='center', va='center',
+                          size=10, xytext=(0, 8),
+                          textcoords='offset points')
 
-    plt.tight_layout()
-    grafico_throughput_path = os.path.join(GRAFICOS_DIR, f"{scenario_folder}_throughput.png")
-    plt.savefig(grafico_throughput_path)
-    print(f"Gráfico de throughput salvo em '{grafico_throughput_path}'.")
+        plt.tight_layout()
+        grafico_throughput_path = os.path.join(GRAFICOS_DIR, f"{scenario_folder}_throughput.png")
+        plt.savefig(grafico_throughput_path)
+        print(f"Gráfico de throughput salvo em '{grafico_throughput_path}'.")
 
     # --- 3. Análise de Erros ---
     error_df = df[df['success'] == False]
@@ -121,6 +122,36 @@ def analyze_and_plot(scenario_folder):
         print(f"Gráfico de erros salvo em '{grafico_erros_path}'.")
     else:
         print("\nNenhum erro registrado.")
+        
+    # --- 4. Análise de Conflitos ---
+    if 'conflict_detected' in df.columns:
+        conflict_df = df[df['conflict_detected'] == True]
+        if not conflict_df.empty:
+            conflict_counts = conflict_df['service'].value_counts()
+            print("\n--- Contagem de Conflitos de Duplicação ---")
+            print(conflict_counts)
+            
+            plt.figure(figsize=(10, 6))
+            conflict_bars = conflict_counts.plot(kind='bar', color='orange')
+            plt.title(f'Contagem de Conflitos por Serviço ({scenario_folder})', fontsize=16)
+            plt.ylabel('Número de Conflitos', fontsize=12)
+            plt.xlabel('Serviço', fontsize=12)
+            plt.xticks(rotation=0)
+            plt.grid(axis='y', linestyle='--', linewidth=0.7)
+
+            for bar in conflict_bars.patches:
+                conflict_bars.annotate(f'{int(bar.get_height())}', 
+                                    (bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                                    ha='center', va='center',
+                                    size=10, xytext=(0, 8),
+                                    textcoords='offset points')
+
+            plt.tight_layout()
+            grafico_conflitos_path = os.path.join(GRAFICOS_DIR, f"{scenario_folder}_conflitos.png")
+            plt.savefig(grafico_conflitos_path)
+            print(f"Gráfico de conflitos salvo em '{grafico_conflitos_path}'.")
+        else:
+            print("\nNenhum conflito de duplicação detectado.")
 
     plt.close('all')
 
@@ -132,7 +163,7 @@ if __name__ == "__main__":
         # Pede ao usuário para escolher qual cenário analisar
         scenarios = [d for d in os.listdir(LOGS_DIR) if os.path.isdir(os.path.join(LOGS_DIR, d))]
         if not scenarios:
-            print(f"Nenhuma pasta de cenário encontrada em '{LOGS_DIR}'. Crie subpastas como 'cenario_1k' dentro de 'logs'.")
+            print(f"Nenhuma pasta de cenário encontrada em '{LOGS_DIR}'.")
         else:
             print("Selecione o cenário para analisar:")
             for i, s in enumerate(scenarios):

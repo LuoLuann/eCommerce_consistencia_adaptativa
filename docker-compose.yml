@@ -2,17 +2,14 @@ version: '3.8'
 
 services:
   proxy:
-    build:
-      context: ./proxy
-      dockerfile: Dockerfile
+    build: ./proxy
+    image: ecommerce-proxy # Nome da imagem que será construída
     ports:
       - "5000:5000"
     environment:
       - REDIS_HOST=redis-master
     networks:
       - rede_consistencia
-    volumes:
-      - ./proxy:/app # Mapeia o código do proxy
 
   redis-master:
     image: redis:7-alpine
@@ -27,41 +24,98 @@ services:
     networks:
       - rede_consistencia
 
-  servico-pedidos:
-    build: ./servico-pedidos
-    depends_on:
-      - proxy
-    networks:
-      - rede_consistencia
-    volumes:
-      - ./logs:/app/logs
+  # CLIENTES DE TESTE (Orquestrados dinamicamente)
+  # Todos os serviços de cliente usarão a mesma imagem.
 
-  servico-pagamentos:
-    build: ./servico-pagamentos
+  avaliacoes:
+    build: ./client_runner # Define o contexto para construir a imagem
+    image: experimento-cliente # Nomeia a imagem que será construída
     depends_on:
       - proxy
+    environment:
+      - SERVICE_NAME=avaliacoes
+      - CONSISTENCY_TYPE=eventual
+      - NODE_ID=avaliacoes-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
       - ./logs:/app/logs
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
 
-  servico-catalogo:
-    build: ./servico-catalogo
+  catalogo:
+    build: ./client_runner
+    image: experimento-cliente
     depends_on:
       - proxy
+    environment:
+      - SERVICE_NAME=catalogo
+      - CONSISTENCY_TYPE=eventual
+      - NODE_ID=catalogo-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
       - ./logs:/app/logs
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
 
-  servico-avaliacoes:
-    build: ./servico-avaliacoes
+  pagamentos:
+    build: ./client_runner
+    image: experimento-cliente
     depends_on:
       - proxy
+    environment:
+      - SERVICE_NAME=pagamentos
+      - CONSISTENCY_TYPE=strong
+      - NODE_ID=pagamentos-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
       - ./logs:/app/logs
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+
+  pedidos:
+    build: ./client_runner
+    image: experimento-cliente
+    depends_on:
+      - proxy
+    environment:
+      - SERVICE_NAME=pedidos
+      - CONSISTENCY_TYPE=strong
+      - NODE_ID=pedidos-{{.Task.Slot}}
+    networks:
+      - rede_consistencia
+    volumes:
+      - ./logs:/app/logs
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
 
 networks:
   rede_consistencia:
+    driver: overlay
+    attachable: true
