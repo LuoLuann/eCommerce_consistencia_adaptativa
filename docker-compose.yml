@@ -3,11 +3,15 @@ version: '3.8'
 services:
   proxy:
     build: ./proxy
-    image: ecommerce-proxy # Nome da imagem que será construída
+    image: ecommerce-proxy
     ports:
       - "5000:5000"
     environment:
       - REDIS_HOST=redis-master
+      # A consistência é passada para o proxy
+      - CONSISTENCY_TYPE=${CONSISTENCY_TYPE:-dynamic}
+      # O número de réplicas é necessário para o modo 'strong'
+      - NUM_REPLICAS_FOR_STRONG=${NUM_REPLICAS:-1}
     networks:
       - rede_consistencia
 
@@ -16,6 +20,7 @@ services:
     networks:
       - rede_consistencia
 
+  # As réplicas do Redis agora são criadas dinamicamente
   redis-replica:
     image: redis:7-alpine
     command: redis-server --slaveof redis-master 6379
@@ -23,31 +28,25 @@ services:
       - redis-master
     networks:
       - rede_consistencia
-
-  # CLIENTES DE TESTE (Orquestrados dinamicamente)
-  # Todos os serviços de cliente usarão a mesma imagem.
+    deploy:
+      # O número de réplicas é definido pela variável de ambiente
+      replicas: ${NUM_REPLICAS:-1}
 
   avaliacoes:
-    build: ./client_runner # Define o contexto para construir a imagem
-    image: experimento-cliente # Nomeia a imagem que será construída
+    build: ./client_runner
+    image: experimento-cliente
     depends_on:
       - proxy
     environment:
       - SERVICE_NAME=avaliacoes
-      - CONSISTENCY_TYPE=eventual
+      - NUM_REQUESTS=${NUM_REQUESTS:-1000}
       - NODE_ID=avaliacoes-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
-      - ./logs:/app/logs
+      - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
       replicas: 2
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
-      restart_policy:
-        condition: on-failure
 
   catalogo:
     build: ./client_runner
@@ -56,20 +55,15 @@ services:
       - proxy
     environment:
       - SERVICE_NAME=catalogo
-      - CONSISTENCY_TYPE=eventual
+      - NUM_REQUESTS=${NUM_REQUESTS:-1000}
       - NODE_ID=catalogo-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
-      - ./logs:/app/logs
+      - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
       replicas: 2
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
-      restart_policy:
-        condition: on-failure
+      # ...
 
   pagamentos:
     build: ./client_runner
@@ -78,20 +72,15 @@ services:
       - proxy
     environment:
       - SERVICE_NAME=pagamentos
-      - CONSISTENCY_TYPE=strong
+      - NUM_REQUESTS=${NUM_REQUESTS:-1000}
       - NODE_ID=pagamentos-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
-      - ./logs:/app/logs
+      - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
       replicas: 1
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
-      restart_policy:
-        condition: on-failure
+      # ...
 
   pedidos:
     build: ./client_runner
@@ -100,20 +89,15 @@ services:
       - proxy
     environment:
       - SERVICE_NAME=pedidos
-      - CONSISTENCY_TYPE=strong
+      - NUM_REQUESTS=${NUM_REQUESTS:-1000}
       - NODE_ID=pedidos-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
-      - ./logs:/app/logs
+      - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
       replicas: 1
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
-      restart_policy:
-        condition: on-failure
+      # ...
 
 networks:
   rede_consistencia:
