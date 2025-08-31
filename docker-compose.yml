@@ -16,104 +16,58 @@ services:
     networks:
       - rede_consistencia
 
-  redis-replica:
+  # A primeira réplica sempre estará ativa
+  redis-replica-1:
     image: redis:7-alpine
     command: redis-server --slaveof redis-master 6379
-    depends_on:
-      - redis-master
-    networks:
-      - rede_consistencia
+    depends_on: [redis-master]
+    networks: [rede_consistencia]
 
-  # CLIENTES DE TESTE (Orquestrados dinamicamente)
-  # Todos os serviços de cliente usarão a mesma imagem.
+  # A segunda réplica só será ativada com o profile "2-ou-mais-replicas"
+  redis-replica-2:
+    image: redis:7-alpine
+    command: redis-server --slaveof redis-master 6379
+    depends_on: [redis-master]
+    networks: [rede_consistencia]
+    profiles: ["2-ou-mais-replicas", "4-replicas"]
 
-  avaliacoes:
-    build: ./client_runner # Define o contexto para construir a imagem
-    image: experimento-cliente # Nomeia a imagem que será construída
-    depends_on:
-      - proxy
-    environment:
-      - SERVICE_NAME=avaliacoes
-      - CONSISTENCY_TYPE=eventual
-      - NODE_ID=avaliacoes-{{.Task.Slot}}
-    networks:
-      - rede_consistencia
-    volumes:
-      - ./logs:/app/logs
-    deploy:
-      replicas: 2
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
-      restart_policy:
-        condition: on-failure
+  # As réplicas 3 e 4 só serão ativadas com o profile "4-replicas"
+  redis-replica-3:
+    image: redis:7-alpine
+    command: redis-server --slaveof redis-master 6379
+    depends_on: [redis-master]
+    networks: [rede_consistencia]
+    profiles: ["4-replicas"]
 
-  catalogo:
-    build: ./client_runner
-    image: experimento-cliente
-    depends_on:
-      - proxy
-    environment:
-      - SERVICE_NAME=catalogo
-      - CONSISTENCY_TYPE=eventual
-      - NODE_ID=catalogo-{{.Task.Slot}}
-    networks:
-      - rede_consistencia
-    volumes:
-      - ./logs:/app/logs
-    deploy:
-      replicas: 2
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
-      restart_policy:
-        condition: on-failure
+  redis-replica-4:
+    image: redis:7-alpine
+    command: redis-server --slaveof redis-master 6379
+    depends_on: [redis-master]
+    networks: [rede_consistencia]
+    profiles: ["4-replicas"]
 
-  pagamentos:
-    build: ./client_runner
-    image: experimento-cliente
-    depends_on:
-      - proxy
-    environment:
-      - SERVICE_NAME=pagamentos
-      - CONSISTENCY_TYPE=strong
-      - NODE_ID=pagamentos-{{.Task.Slot}}
-    networks:
-      - rede_consistencia
-    volumes:
-      - ./logs:/app/logs
-    deploy:
-      replicas: 1
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
-      restart_policy:
-        condition: on-failure
+  # avaliacoes:
+  #   build: ./client_runner # Define o contexto para construir a imagem
+  #   image: experimento-cliente # Nomeia a imagem que será construída
+  #   depends_on:
+  #     - proxy
+  #   environment:
+  #     - SERVICE_NAME=avaliacoes
+  #     - CONSISTENCY_TYPE=eventual
+  #     - NODE_ID=avaliacoes-{{.Task.Slot}}
+  #   networks:
+  #     - rede_consistencia
+  #   volumes:
+  #     - ./logs:/app/logs
+  #   deploy:
+  #     replicas: 2
+  #     resources:
+  #       limits:
+  #         cpus: '0.50'
+  #         memory: 256M
+  #     restart_policy:
+  #       condition: on-failure
 
-  pedidos:
-    build: ./client_runner
-    image: experimento-cliente
-    depends_on:
-      - proxy
-    environment:
-      - SERVICE_NAME=pedidos
-      - CONSISTENCY_TYPE=strong
-      - NODE_ID=pedidos-{{.Task.Slot}}
-    networks:
-      - rede_consistencia
-    volumes:
-      - ./logs:/app/logs
-    deploy:
-      replicas: 1
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
-      restart_policy:
-        condition: on-failure
 
 networks:
   rede_consistencia:

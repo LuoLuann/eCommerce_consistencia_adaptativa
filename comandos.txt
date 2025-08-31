@@ -1,0 +1,22 @@
+docker-compose up --build -d
+
+# Testes com 2k requests
+k6 run -e VUS=10 -e TOTAL_REQUESTS=2000 experimento.js
+k6 run -e VUS=50 -e TOTAL_REQUESTS=2000 experimento.js
+k6 run -e VUS=100 -e TOTAL_REQUESTS=2000 experimento.js
+
+# Testes com 5k requests
+k6 run -e VUS=10 -e TOTAL_REQUESTS=5000 experimento.js
+k6 run -e VUS=50 -e TOTAL_REQUESTS=5000 experimento.js
+k6 run -e TOTAL_REQUESTS=5000 -e VUS=100 experimento.js
+
+# Testes com 10k requests
+k6 run -e VUS=10 -e TOTAL_REQUESTS=10000 experimento.js
+k6 run -e VUS=50 -e TOTAL_REQUESTS=10000 experimento.js
+k6 run -e VUS=100 -e TOTAL_REQUESTS=10000 experimento.js
+
+docker-compose --profile "2-ou-mais-replicas" up --build -d
+docker-compose --profile "4-replicas" up --build -d
+
+# Exemplo
+k6 run -e VUS=10 -e TOTAL_REQUESTS=2000 experimento.js > resultado_1replica_2kreqs_10vus.txt
