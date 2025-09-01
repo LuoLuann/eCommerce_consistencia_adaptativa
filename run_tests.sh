@@ -3,48 +3,55 @@
 # --- Configurações dos Testes ---
 declare -a REPLICAS=("1" "2" "3")
 declare -a CONSISTENCY_MODES=("strong" "eventual" "dynamic")
-declare -a REQUEST_LOADS=("1000" "10000" "20000")
+
+# Carga POR CLIENTE (Total = Carga x 5)
+declare -a REQUESTS_PER_CLIENT=("200" "1000" "2000")
+# Nomes para as pastas de log, refletindo a CARGA TOTAL
+declare -a TOTAL_LOAD_NAMES=("1k" "5k" "10k")
 
 # --- Loop Principal de Testes ---
 for replicas in "${REPLICAS[@]}"; do
   for mode in "${CONSISTENCY_MODES[@]}"; do
-    for load in "${REQUEST_LOADS[@]}"; do
+    for i in "${!REQUESTS_PER_CLIENT[@]}"; do
+
+      # Extrai a carga por cliente e o nome da carga total
+      load_per_client=${REQUESTS_PER_CLIENT[i]}
+      total_load_name=${TOTAL_LOAD_NAMES[i]}
 
       # --- Nome do Cenário ---
-      SCENARIO_NAME="replicas_${replicas}/${mode}/${load}k"
+      SCENARIO_NAME="replicas_${replicas}/${mode}/total_${total_load_name}"
       echo "========================================================================="
       echo "EXECUTANDO CENÁRIO: $SCENARIO_NAME"
+      echo "Requisições por cliente: $load_per_client"
       echo "========================================================================="
 
       # --- Criação do Diretório de Logs ---
-      LOG_DIR="./logs/$SCENARIO_NAME"
-      mkdir -p "$LOG_DIR"
+      LOG_DIR_ABSOLUTE="$(pwd)/logs/$SCENARIO_NAME"
+      mkdir -p "$LOG_DIR_ABSOLUTE"
+      echo "Diretório de log: $LOG_DIR_ABSOLUTE"
 
       # --- Exportação das Variáveis de Ambiente ---
       export NUM_REPLICAS=$replicas
       export CONSISTENCY_TYPE=$mode
-      export NUM_REQUESTS=$load
-      export LOG_DIR_CLIENTS=$LOG_DIR # Passa o diretório de log para o docker-compose
+      export NUM_REQUESTS=$load_per_client # Passa a carga por cliente
+      export LOG_DIR_CLIENTS=$LOG_DIR_ABSOLUTE
 
-      # --- Inicia o Docker Swarm (necessário para 'deploy') ---
+      # --- Inicia o Docker Swarm ---
       docker swarm init 2>/dev/null || true
 
-      # --- Executa o Docker Compose ---
-      echo "Subindo os containers..."
-      docker-compose up -d --build
+      # --- PASSO 1: Sobe a infraestrutura (proxy, redis) em background ---
+      echo "Subindo a infraestrutura (proxy, redis)..."
+      docker-compose up -d --build redis-master redis-replica proxy
 
-      # --- Aguarda a finalização dos clientes ---
-      echo "Aguardando a finalização dos testes dos clientes..."
-      # A lógica é esperar que os containers 'client_runner' parem de executar
-      while [ "$(docker ps -q -f name=ecommerce_consistencia_adaptativa_avaliacoes)" ] || \
-            [ "$(docker ps -q -f name=ecommerce_consistencia_adaptativa_catalogo)" ] || \
-            [ "$(docker ps -q -f name=ecommerce_consistencia_adaptativa_pagamentos)" ] || \
-            [ "$(docker ps -q -f name=ecommerce_consistencia_adaptativa_pedidos)" ]; do
-        sleep 10
-        echo " - Ainda aguardando..."
-      done
+      echo "Aguardando o proxy ficar disponível..."
+      sleep 15
 
-      echo "Testes finalizados. Derrubando os containers..."
+      # --- PASSO 2: Executa os 5 clientes e aguarda a finalização ---
+      echo "Iniciando os 5 clientes e aguardando a conclusão dos testes..."
+      docker-compose up --build --remove-orphans avaliacoes catalogo pagamentos pedidos carrinho
+
+      # --- PASSO 3: Derruba todo o ambiente ---
+      echo "Testes finalizados. Derrubando todos os containers..."
       docker-compose down
 
       # --- Limpa o estado do Swarm ---
@@ -53,7 +60,7 @@ for replicas in "${REPLICAS[@]}"; do
       echo "CENÁRIO $SCENARIO_NAME FINALIZADO."
       echo "========================================================================="
       echo ""
-      sleep 5 # Pequeno intervalo entre os testes
+      sleep 5
 
     done
   done

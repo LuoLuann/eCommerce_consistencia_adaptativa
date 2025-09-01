@@ -8,9 +8,7 @@ services:
       - "5000:5000"
     environment:
       - REDIS_HOST=redis-master
-      # A consistência é passada para o proxy
       - CONSISTENCY_TYPE=${CONSISTENCY_TYPE:-dynamic}
-      # O número de réplicas é necessário para o modo 'strong'
       - NUM_REPLICAS_FOR_STRONG=${NUM_REPLICAS:-1}
     networks:
       - rede_consistencia
@@ -20,7 +18,6 @@ services:
     networks:
       - rede_consistencia
 
-  # As réplicas do Redis agora são criadas dinamicamente
   redis-replica:
     image: redis:7-alpine
     command: redis-server --slaveof redis-master 6379
@@ -29,7 +26,6 @@ services:
     networks:
       - rede_consistencia
     deploy:
-      # O número de réplicas é definido pela variável de ambiente
       replicas: ${NUM_REPLICAS:-1}
 
   avaliacoes:
@@ -39,14 +35,16 @@ services:
       - proxy
     environment:
       - SERVICE_NAME=avaliacoes
-      - NUM_REQUESTS=${NUM_REQUESTS:-1000}
+      - NUM_REQUESTS=${NUM_REQUESTS:-2000}
       - NODE_ID=avaliacoes-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
       - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
-      replicas: 2
+      replicas: 1 
+      restart_policy:
+        condition: on-failure
 
   catalogo:
     build: ./client_runner
@@ -55,15 +53,16 @@ services:
       - proxy
     environment:
       - SERVICE_NAME=catalogo
-      - NUM_REQUESTS=${NUM_REQUESTS:-1000}
+      - NUM_REQUESTS=${NUM_REQUESTS:-2000}
       - NODE_ID=catalogo-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
       - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
-      replicas: 2
-      # ...
+      replicas: 1
+      restart_policy:
+        condition: on-failure
 
   pagamentos:
     build: ./client_runner
@@ -72,7 +71,7 @@ services:
       - proxy
     environment:
       - SERVICE_NAME=pagamentos
-      - NUM_REQUESTS=${NUM_REQUESTS:-1000}
+      - NUM_REQUESTS=${NUM_REQUESTS:-2000}
       - NODE_ID=pagamentos-{{.Task.Slot}}
     networks:
       - rede_consistencia
@@ -80,7 +79,8 @@ services:
       - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
       replicas: 1
-      # ...
+      restart_policy:
+        condition: on-failure
 
   pedidos:
     build: ./client_runner
@@ -89,7 +89,7 @@ services:
       - proxy
     environment:
       - SERVICE_NAME=pedidos
-      - NUM_REQUESTS=${NUM_REQUESTS:-1000}
+      - NUM_REQUESTS=${NUM_REQUESTS:-2000}
       - NODE_ID=pedidos-{{.Task.Slot}}
     networks:
       - rede_consistencia
@@ -97,7 +97,26 @@ services:
       - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
       replicas: 1
-      # ...
+      restart_policy:
+        condition: on-failure
+
+  carrinho:
+    build: ./client_runner
+    image: experimento-cliente
+    depends_on:
+      - proxy
+    environment:
+      - SERVICE_NAME=carrinho
+      - NUM_REQUESTS=${NUM_REQUESTS:-2000}
+      - NODE_ID=carrinho-{{.Task.Slot}}
+    networks:
+      - rede_consistencia
+    volumes:
+      - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
 
 networks:
   rede_consistencia:
