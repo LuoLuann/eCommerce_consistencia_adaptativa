@@ -3,11 +3,13 @@ version: '3.8'
 services:
   proxy:
     build: ./proxy
-    image: ecommerce-proxy # Nome da imagem que será construída
+    image: ecommerce-proxy
     ports:
       - "5000:5000"
     environment:
       - REDIS_HOST=redis-master
+      - CONSISTENCY_TYPE=${CONSISTENCY_TYPE:-dynamic}
+      - NUM_REPLICAS_FOR_STRONG=${NUM_REPLICAS:-1}
     networks:
       - rede_consistencia
 
@@ -23,29 +25,24 @@ services:
       - redis-master
     networks:
       - rede_consistencia
-
-  # CLIENTES DE TESTE (Orquestrados dinamicamente)
-  # Todos os serviços de cliente usarão a mesma imagem.
+    deploy:
+      replicas: ${NUM_REPLICAS:-1}
 
   avaliacoes:
-    build: ./client_runner # Define o contexto para construir a imagem
-    image: experimento-cliente # Nomeia a imagem que será construída
+    build: ./client_runner
+    image: experimento-cliente
     depends_on:
       - proxy
     environment:
       - SERVICE_NAME=avaliacoes
-      - CONSISTENCY_TYPE=eventual
+      - NUM_REQUESTS=${NUM_REQUESTS:-2000}
       - NODE_ID=avaliacoes-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
-      - ./logs:/app/logs
+      - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
-      replicas: 2
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
+      replicas: 1 
       restart_policy:
         condition: on-failure
 
@@ -56,18 +53,14 @@ services:
       - proxy
     environment:
       - SERVICE_NAME=catalogo
-      - CONSISTENCY_TYPE=eventual
+      - NUM_REQUESTS=${NUM_REQUESTS:-2000}
       - NODE_ID=catalogo-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
-      - ./logs:/app/logs
+      - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
-      replicas: 2
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
+      replicas: 1
       restart_policy:
         condition: on-failure
 
@@ -78,18 +71,14 @@ services:
       - proxy
     environment:
       - SERVICE_NAME=pagamentos
-      - CONSISTENCY_TYPE=strong
+      - NUM_REQUESTS=${NUM_REQUESTS:-2000}
       - NODE_ID=pagamentos-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
-      - ./logs:/app/logs
+      - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
       replicas: 1
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
       restart_policy:
         condition: on-failure
 
@@ -100,18 +89,32 @@ services:
       - proxy
     environment:
       - SERVICE_NAME=pedidos
-      - CONSISTENCY_TYPE=strong
+      - NUM_REQUESTS=${NUM_REQUESTS:-2000}
       - NODE_ID=pedidos-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
-      - ./logs:/app/logs
+      - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
       replicas: 1
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
+      restart_policy:
+        condition: on-failure
+
+  carrinho:
+    build: ./client_runner
+    image: experimento-cliente
+    depends_on:
+      - proxy
+    environment:
+      - SERVICE_NAME=carrinho
+      - NUM_REQUESTS=${NUM_REQUESTS:-2000}
+      - NODE_ID=carrinho-{{.Task.Slot}}
+    networks:
+      - rede_consistencia
+    volumes:
+      - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
+    deploy:
+      replicas: 1
       restart_policy:
         condition: on-failure
 

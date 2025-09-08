@@ -7,51 +7,53 @@ from threading import Lock
 
 app = Flask(__name__)
 
-# Configuração para logs
+# --- CONFIGURAÇÕES GERAIS ---
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
-# Conexão com o Redis
 redis_client = redis.Redis(host=os.getenv('REDIS_HOST', 'redis-master'), port=6379, db=0, decode_responses=True)
 
-# --- CONFIGURAÇÕES PARA CONSISTÊNCIA DINÂMICA ---
+# --- CONFIGURAÇÕES DE CONSISTÊNCIA ---
 
-# Se a vazão (requests/segundo) for maior que este valor, usaremos consistência eventual.
-THROUGHPUT_THRESHOLD = 100 
-# Janela de tempo em segundos para calcular a vazão.
+# Tipo de consistência forçada (strong, eventual) ou dinâmica.
+# O padrão é 'dynamic' se a variável não for definida.
+FORCED_CONSISTENCY = os.getenv('CONSISTENCY_TYPE', 'dynamic')
+
+# Limiar para o modo dinâmico
+THROUGHPUT_THRESHOLD = 100
 TIME_WINDOW_SECONDS = 10
 
-# Variáveis globais para rastrear a vazão
-request_count = 0
-window_start_time = time.time()
-lock = Lock() # Lock para garantir a segurança em ambiente com múltiplas threads
-
-NUM_REPLICAS_FOR_STRONG = 1 
+# Configurações para consistência forte
+# O número de réplicas é lido do ambiente, com padrão 1.
+NUM_REPLICAS_FOR_STRONG = int(os.getenv('NUM_REPLICAS_FOR_STRONG', 1))
 WAIT_TIMEOUT_MS = 1000
 
-def get_dynamic_consistency():
+# Variáveis globais para o modo dinâmico
+request_count = 0
+window_start_time = time.time()
+lock = Lock()
+
+def get_consistency_mode():
     """
-    Decide o nível de consistência com base na vazão atual.
+    Decide o nível de consistência.
+    Se um modo for forçado via variável de ambiente, o utiliza.
+    Caso contrário, decide dinamicamente com base na vazão.
     """
+    if FORCED_CONSISTENCY in ['strong', 'eventual']:
+        return FORCED_CONSISTENCY
+
+    # Lógica dinâmica original
     global request_count, window_start_time
-    
     current_time = time.time()
-    
+
     with lock:
-        # Verifica se a janela de tempo expirou e reseta se necessário
         if current_time - window_start_time > TIME_WINDOW_SECONDS:
             window_start_time = current_time
             request_count = 0
-
         request_count += 1
-        
-        # Calcula a vazão atual (requests por segundo)
-        elapsed_time = current_time - window_start_time
-        if elapsed_time == 0:
-            elapsed_time = 1 # Evita divisão por zero
-            
+        elapsed_time = current_time - window_start_time or 1
         current_throughput = request_count / elapsed_time
-    
+
     if current_throughput > THROUGHPUT_THRESHOLD:
         print(f"VAZÃO ALTA DETECTADA ({current_throughput:.2f} rps). Usando consistência EVENTUAL.")
         return 'eventual'
@@ -66,26 +68,25 @@ def write_data():
         key = data['key']
         value = data['value']
         
-        # A decisão de consistência é tomada dinamicamente pelo proxy
-        consistency = get_dynamic_consistency()
+        consistency = get_consistency_mode()
 
         if consistency == 'strong':
             redis_client.set(key, value)
+            # Garante a escrita no número de réplicas configurado
             replicas_acked = redis_client.wait(NUM_REPLICAS_FOR_STRONG, WAIT_TIMEOUT_MS)
 
             if replicas_acked >= NUM_REPLICAS_FOR_STRONG:
                 return jsonify({"status": "success", "consistency": "strong", "replicas_acked": replicas_acked}), 200
             else:
-                # Se a escrita forte falhar, podemos opcionalmente tentar uma escrita eventual como fallback
-                # redis_client.set(key, value)
-                # return jsonify({"status": "fallback", "consistency": "eventual", "message": "Strong consistency failed, fell back to eventual"}), 200
-                return jsonify({"status": "error", "message": "Write timeout: strong consistency guarantees failed"}), 503
-        else:
+                return jsonify({"status": "error", "message": f"Write timeout: strong consistency failed. Replicas acked: {replicas_acked}"}), 503
+        else: # 'eventual'
             redis_client.set(key, value)
             return jsonify({"status": "success", "consistency": "eventual"}), 200
+
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 
+# ... (o restante do arquivo /read e app.run continua igual)
 @app.route('/read/<key>', methods=['GET'])
 def read_data(key):
     try:
