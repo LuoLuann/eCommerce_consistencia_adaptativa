@@ -4,10 +4,10 @@
 declare -a REPLICAS=("1" "2" "3")
 declare -a CONSISTENCY_MODES=("strong" "eventual" "dynamic")
 
-# Carga POR CLIENTE (Total = Carga x 5)
-declare -a REQUESTS_PER_CLIENT=("200" "1000" "2000")
+# Carga POR CLIENTE (Total = Carga x 20)
+declare -a REQUESTS_PER_CLIENT=("100" "400" "800")
 # Nomes para as pastas de log, refletindo a CARGA TOTAL
-declare -a TOTAL_LOAD_NAMES=("1k" "5k" "10k")
+declare -a TOTAL_LOAD_NAMES=("5000k" "20000k" "40000k")
 
 # --- Loop Principal de Testes ---
 for replicas in "${REPLICAS[@]}"; do
@@ -22,7 +22,8 @@ for replicas in "${REPLICAS[@]}"; do
       SCENARIO_NAME="replicas_${replicas}/${mode}/total_${total_load_name}"
       echo "========================================================================="
       echo "EXECUTANDO CENÁRIO: $SCENARIO_NAME"
-      echo "Requisições por cliente: $load_per_client"
+      echo "Total de Geradores de Carga: 20"
+      echo "Requisições por gerador: $load_per_client"
       echo "========================================================================="
 
       # --- Criação do Diretório de Logs ---
@@ -46,8 +47,8 @@ for replicas in "${REPLICAS[@]}"; do
       echo "Aguardando o proxy ficar disponível..."
       sleep 15
 
-      # --- PASSO 2: Executa os 5 clientes e aguarda a finalização ---
-      echo "Iniciando os 5 clientes e aguardando a conclusão dos testes..."
+      # --- PASSO 2: Executa os 20 clientes (5 serviços x 4 réplicas) e aguarda a finalização ---
+      echo "Iniciando os 20 clientes e aguardando a conclusão dos testes..."
       docker-compose up --build --remove-orphans avaliacoes catalogo pagamentos pedidos carrinho
 
       # --- PASSO 3: Derruba todo o ambiente ---

@@ -28,6 +28,8 @@ services:
     deploy:
       replicas: ${NUM_REPLICAS:-1}
 
+  # --- SERVIÇOS DE CLIENTE (Total de 20 instâncias: 5 serviços x 4 réplicas) ---
+
   avaliacoes:
     build: ./client_runner
     image: experimento-cliente
@@ -35,14 +37,14 @@ services:
       - proxy
     environment:
       - SERVICE_NAME=avaliacoes
-      - NUM_REQUESTS=${NUM_REQUESTS:-2000}
+      - NUM_REQUESTS=${NUM_REQUESTS} # A carga é definida no run_tests.sh
       - NODE_ID=avaliacoes-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
       - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
-      replicas: 1 
+      replicas: 10 # Ajustado para 4 réplicas
       restart_policy:
         condition: on-failure
 
@@ -53,14 +55,14 @@ services:
       - proxy
     environment:
       - SERVICE_NAME=catalogo
-      - NUM_REQUESTS=${NUM_REQUESTS:-2000}
+      - NUM_REQUESTS=${NUM_REQUESTS}
       - NODE_ID=catalogo-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
       - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
-      replicas: 1
+      replicas: 10 # Ajustado para 4 réplicas
       restart_policy:
         condition: on-failure
 
@@ -71,14 +73,14 @@ services:
       - proxy
     environment:
       - SERVICE_NAME=pagamentos
-      - NUM_REQUESTS=${NUM_REQUESTS:-2000}
+      - NUM_REQUESTS=${NUM_REQUESTS}
       - NODE_ID=pagamentos-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
       - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
-      replicas: 1
+      replicas: 10 # Ajustado para 4 réplicas
       restart_policy:
         condition: on-failure
 
@@ -89,14 +91,14 @@ services:
       - proxy
     environment:
       - SERVICE_NAME=pedidos
-      - NUM_REQUESTS=${NUM_REQUESTS:-2000}
+      - NUM_REQUESTS=${NUM_REQUESTS}
       - NODE_ID=pedidos-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
       - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
-      replicas: 1
+      replicas: 10 # Ajustado para 4 réplicas
       restart_policy:
         condition: on-failure
 
@@ -107,14 +109,14 @@ services:
       - proxy
     environment:
       - SERVICE_NAME=carrinho
-      - NUM_REQUESTS=${NUM_REQUESTS:-2000}
+      - NUM_REQUESTS=${NUM_REQUESTS}
       - NODE_ID=carrinho-{{.Task.Slot}}
     networks:
       - rede_consistencia
     volumes:
       - ${LOG_DIR_CLIENTS:-./logs}:/app/logs
     deploy:
-      replicas: 1
+      replicas: 10 # Ajustado para 4 réplicas
       restart_policy:
         condition: on-failure
 
