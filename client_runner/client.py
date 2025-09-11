@@ -9,12 +9,11 @@ import json
 print("--- SCRIPT DO CLIENTE INICIADO ---")
 
 # --- DANDO UM TEMPO PARA OS OUTROS SERVIÇOS INICIAREM ---
-time.sleep(5) 
+time.sleep(5)
 
 # --- CONFIGURAÇÕES VINDAS DE VARIÁVEIS DE AMBIENTE ---
 SERVICE_NAME = os.getenv("SERVICE_NAME", "default-service")
 NUM_REQUESTS = int(os.getenv("NUM_REQUESTS", 1000))
-SLEEP_INTERVAL = float(os.getenv("SLEEP_INTERVAL", 0.1))
 NODE_ID = os.getenv("NODE_ID", "node-unknown")
 
 PROXY_WRITE_URL = "http://proxy:5000/write"
@@ -40,6 +39,8 @@ def generate_payload(service_name, index):
         return f"product_view:item{random.randint(1, 10)}", {"view_count": random.randint(1, 1000), "client_id": NODE_ID}
     elif service_name == "avaliacoes":
         return f"{SERVICE_NAME}_{random.randint(10000, 99999)}", {"data": f"payload_{index}", "client_id": NODE_ID}
+    elif service_name == "carrinho":
+        return f"cart:{random.randint(500, 1500)}", {"product_id": f"prod_{random.randint(1, 100)}", "action": "add", "client_id": NODE_ID}
     else:
         return f"key_{index}", {"data": f"payload_{index}", "client_id": NODE_ID}
 
@@ -54,7 +55,7 @@ try:
         success = False
         error_msg = ""
         conflict_detected = False
-        consistency_used = "N/A" # O cliente não sabe mais a consistência
+        consistency_used = "N/A"
         
         old_value = None
         try:
@@ -67,7 +68,6 @@ try:
         start_time_latency = time.time()
         
         try:
-            # O cliente não envia mais o campo 'consistency'
             write_response = requests.post(PROXY_WRITE_URL, json={
                 "key": key,
                 "value": json.dumps(value)
@@ -75,7 +75,6 @@ try:
             
             write_response.raise_for_status()
             
-            # Pega a consistência que o proxy usou a partir da resposta
             response_data = write_response.json()
             consistency_used = response_data.get("consistency", "unknown")
             success = True
@@ -93,7 +92,7 @@ try:
         results.append({
             "timestamp": datetime.now().isoformat(),
             "service": SERVICE_NAME,
-            "consistency_used": consistency_used, # Loga a consistência informada pelo proxy
+            "consistency_used": consistency_used,
             "latency_ms": latency_ms,
             "success": success,
             "error_message": error_msg,
@@ -103,7 +102,6 @@ try:
         if (i + 1) % (NUM_REQUESTS / 10) == 0:
             print(f"Serviço {SERVICE_NAME} ({NODE_ID}): Progresso - {i+1}/{NUM_REQUESTS} requisições enviadas.")
         
-        time.sleep(SLEEP_INTERVAL)
 
 finally:
     print(f"--- BLOCO FINALLY ALCANÇADO para {SERVICE_NAME} ({NODE_ID}) ---")
@@ -112,7 +110,6 @@ finally:
     
     if results:
         print(f"Salvando {len(results)} resultados no arquivo CSV...")
-        # Adiciona 'consistency_used' aos cabeçalhos do CSV
         fieldnames = ["timestamp", "service", "consistency_used", "latency_ms", "success", "error_message", "conflict_detected"]
         with open(output_file_path, 'w', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)

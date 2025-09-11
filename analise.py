@@ -1,119 +1,113 @@
-import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import glob
+import os
+import re
 
-LOGS_DIR = 'logs'
-GRAPH_DIR = 'graficos'
-os.makedirs(GRAPH_DIR, exist_ok=True)
+def parse_total_reqs(req_str):
+    """
+    Converte uma string de carga como '5k' ou '20000k' para um inteiro.
+    """
+    req_str = req_str.lower()
+    if 'k' in req_str:
+        # Remove 'k' e multiplica por 1000
+        return int(re.sub(r'[^0-9]', '', req_str)) * 1000
+    return int(req_str)
 
-print("Iniciando a análise dos resultados...")
-
-def parse_path(path):
-    """Extrai os parâmetros do teste a partir do caminho do diretório."""
-    parts = path.split(os.sep)
-    try:
-        replicas = int(parts[-3].replace('replicas_', ''))
-        consistency = parts[-2]
-        total_load = parts[-1].replace('total_', '')
-        return replicas, consistency, total_load
-    except (IndexError, ValueError) as e:
-        print(f"Aviso: Não foi possível parsear o diretório: {path}. Erro: {e}")
-        return None, None, None
-
-def calculate_metrics(df):
-    """Calcula as métricas agregadas para um DataFrame de um cenário."""
-    df['latency_ms'] = pd.to_numeric(df['latency_ms'], errors='coerce')
-    df = df.dropna(subset=['latency_ms'])
-
-    avg_latency = df['latency_ms'].mean()
-    error_count = df[df['success'] == False].shape[0]
-
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    total_duration_seconds = (df['timestamp'].max() - df['timestamp'].min()).total_seconds()
-    successful_requests = df[df['success'] == True].shape[0]
-
-    throughput = successful_requests / total_duration_seconds if total_duration_seconds > 0 else 0
-
-    return {
-        'avg_latency': avg_latency,
-        'error_count': error_count,
-        'throughput_rps': throughput
-    }
-
-# --- Coleta e Processamento dos Dados ---
-all_results = []
-scenario_paths = set(os.path.dirname(p) for p in glob.glob(f'{LOGS_DIR}/**/*.csv', recursive=True))
-
-for path in scenario_paths:
-    replicas, consistency, total_load = parse_path(path)
-    if not all((replicas, consistency, total_load)):
-        continue
-
-    all_csvs = glob.glob(os.path.join(path, '*.csv'))
-    if not all_csvs:
-        continue
-
-    df_scenario = pd.concat((pd.read_csv(f) for f in all_csvs), ignore_index=True)
-    metrics = calculate_metrics(df_scenario)
+def load_all_logs(base_dir):
+    """
+    Carrega todos os arquivos de log CSV recursivamente de um diretório base
+    e extrai os parâmetros (modo, réplicas, carga) do caminho do arquivo.
+    """
+    all_data = []
     
-    all_results.append({
-        'replicas': replicas,
-        'consistency': consistency,
-        'total_load': total_load,
-        **metrics
-    })
+    if not os.path.isdir(base_dir):
+        print(f"Diretório de logs base não encontrado: '{base_dir}'")
+        return pd.DataFrame()
 
-if not all_results:
-    print("Nenhum resultado encontrado. Verifique se a pasta 'logs' contém os CSVs no formato esperado.")
-else:
-    # --- Geração dos Gráficos ---
-    results_df = pd.DataFrame(all_results)
-    results_df['total_load_numeric'] = results_df['total_load'].str.replace('k', '').astype(int)
-    results_df = results_df.sort_values('total_load_numeric')
+    for root, dirs, files in os.walk(base_dir):
+        for file in files:
+            if file.endswith('.csv'):
+                file_path = os.path.join(root, file)
+                try:
+                    parts = file_path.split(os.sep)
+                    
+                    if len(parts) >= 4:
+                        replicas_str = [p for p in parts if p.startswith('replicas_')]
+                        mode_str = parts[-3] 
+                        total_reqs_folder_str = [p for p in parts if p.startswith('total_')]
 
-    sns.set_theme(style="whitegrid")
+                        if replicas_str and total_reqs_folder_str:
+                            num_replicas = int(replicas_str[0].split('_')[1])
+                            # Extrai o valor e processa o 'k'
+                            total_reqs_value = total_reqs_folder_str[0].split('_')[1]
+                            total_reqs = parse_total_reqs(total_reqs_value)
+                            mode = mode_str.capitalize()
 
-    for consistency_type in results_df['consistency'].unique():
-        print(f"--- Gerando gráficos para o modo de consistência: '{consistency_type}' ---")
-        
-        df_group = results_df[results_df['consistency'] == consistency_type]
+                            df = pd.read_csv(file_path)
+                            df['replicas'] = num_replicas
+                            df['modo'] = mode
+                            df['carga_total'] = total_reqs
+                            all_data.append(df)
+                except (IndexError, ValueError) as e:
+                    print(f"Não foi possível processar o caminho do arquivo: {file_path}. Erro: {e}")
+                except Exception as e:
+                    print(f"Erro ao ler o arquivo {file_path}: {e}")
+    
+    if not all_data:
+        return pd.DataFrame()
 
-        # --- Gráfico 1: Latência Média ---
-        plt.figure(figsize=(10, 6))
-        ax = sns.barplot(data=df_group, x='total_load', y='avg_latency', hue='replicas', palette='viridis')
-        ax.set_title(f'Latência Média - Consistência: {consistency_type.upper()}')
-        ax.set_xlabel('Carga de Trabalho Total')
-        ax.set_ylabel('Latência Média (ms)')
-        ax.legend(title='Nº de Réplicas')
-        output_path = os.path.join(GRAPH_DIR, f'latencia_{consistency_type}.png')
-        plt.savefig(output_path)
-        plt.close()
-        print(f"Gráfico de latência salvo em: {output_path}")
+    return pd.concat(all_data, ignore_index=True)
 
-        # --- Gráfico 2: Vazão (Throughput) ---
-        plt.figure(figsize=(10, 6))
-        ax = sns.barplot(data=df_group, x='total_load', y='throughput_rps', hue='replicas', palette='plasma')
-        ax.set_title(f'Vazão (Throughput) - Consistência: {consistency_type.upper()}')
-        ax.set_xlabel('Carga de Trabalho Total')
-        ax.set_ylabel('Vazão (Requisições / Segundo)')
-        ax.legend(title='Nº de Réplicas')
-        output_path = os.path.join(GRAPH_DIR, f'vazao_{consistency_type}.png')
-        plt.savefig(output_path)
-        plt.close()
-        print(f"Gráfico de vazão salvo em: {output_path}")
+# --- Carregar Dados ---
+logs_directory = 'logs'
+combined_data = load_all_logs(logs_directory)
 
-        # --- Gráfico 3: Contagem de Erros ---
-        plt.figure(figsize=(10, 6))
-        ax = sns.barplot(data=df_group, x='total_load', y='error_count', hue='replicas', palette='magma')
-        ax.set_title(f'Contagem de Erros - Consistência: {consistency_type.upper()}')
-        ax.set_xlabel('Carga de Trabalho Total')
-        ax.set_ylabel('Número Total de Erros')
-        ax.legend(title='Nº de Réplicas')
-        output_path = os.path.join(GRAPH_DIR, f'erros_{consistency_type}.png')
-        plt.savefig(output_path)
-        plt.close()
-        print(f"Gráfico de erros salvo em: {output_path}")
+# --- Geração do Gráfico ---
+if combined_data.empty:
+    print("Nenhum dado de log foi encontrado. Verifique a estrutura de pastas.")
+    print("Gerando um gráfico de exemplo com dados fictícios.")
+    data = {
+        'latency_ms': [10, 12, 15, 11, 13, 50, 20, 22, 25, 21, 23, 60, 110, 115, 120, 112, 118, 200],
+        'modo': ['Eventual', 'Forte', 'Dinâmico'] * 6,
+        'carga_total': [5000] * 9 + [40000] * 9,
+        'replicas': [1] * 18
+    }
+    combined_data = pd.DataFrame(data)
 
-    print("\nAnálise finalizada. Todos os gráficos foram gerados.")
+# Criar uma coluna de string para a carga para melhor rotulagem e ordenação
+combined_data['carga_str'] = combined_data['carga_total'].apply(
+    lambda x: f'{x // 1000}k' if x >= 1000 else str(x)
+) + ' Requisições'
+
+# Ordenar os rótulos do eixo X com base no valor numérico da carga
+carga_order = sorted(
+    combined_data['carga_str'].unique(), 
+    key=lambda x: int(re.sub(r'[^0-9]', '', x.split()[0]))
+)
+
+plt.style.use('seaborn-v0_8-whitegrid')
+fig, ax = plt.subplots(figsize=(16, 9))
+
+sns.boxplot(
+    data=combined_data,
+    x='carga_str',
+    y='latency_ms',
+    hue='modo',
+    ax=ax,
+    palette='viridis',
+    order=carga_order
+)
+
+ax.set_title('Distribuição da Latência por Cenário e Carga de Trabalho', fontsize=18, pad=20)
+ax.set_xlabel('Carga de Trabalho Total', fontsize=14)
+ax.set_ylabel('Latência por Requisição (ms)', fontsize=14)
+ax.tick_params(axis='x', rotation=0, labelsize=12)
+ax.tick_params(axis='y', labelsize=12)
+ax.legend(title='Modo de Consistência', fontsize=12)
+
+plt.tight_layout(pad=1.5)
+
+output_filename = 'latencia_distribuicao_boxplot_final.png'
+plt.savefig(output_filename, dpi=300)
+print(f"Gráfico salvo como: {output_filename}")

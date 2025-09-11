@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # --- Configurações dos Testes ---
-declare -a REPLICAS=("1" "2" "3")
+declare -a REPLICAS=("1" "4" "8")
 declare -a CONSISTENCY_MODES=("strong" "eventual" "dynamic")
 
 # Carga POR CLIENTE (Total = Carga x 20)
-declare -a REQUESTS_PER_CLIENT=("100" "400" "800")
+declare -a REQUESTS_PER_CLIENT=("200" "1000" "2000")
 # Nomes para as pastas de log, refletindo a CARGA TOTAL
-declare -a TOTAL_LOAD_NAMES=("5000k" "20000k" "40000k")
+declare -a TOTAL_LOAD_NAMES=("4k" "20k" "40k")
 
 # --- Loop Principal de Testes ---
 for replicas in "${REPLICAS[@]}"; do
